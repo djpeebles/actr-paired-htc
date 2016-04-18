@@ -1,0 +1,104 @@
+# ==============================================
+#
+#
+# ==============================================
+# Initiated: Sat Jan 30 08:59:13 2016
+# ==============================================
+
+#+LATEX_CLASS: article
+#+LaTeX_CLASS_OPTIONS: [a4paper,11pt]
+#+OPTIONS: TeX:t LaTeX:t ':t skip:nil ^:nil d:nil todo:t pri:nil tags:not-in-toc
+#+OPTIONS: toc:nil H:5 num:0
+
+#+LaTeX_HEADER: \usepackage[margin=1in]{geometry}
+#+LATEX_HEADER: \usepackage{verbatim}
+#+LaTeX_HEADER: \usepackage[british]{babel}
+#+LaTeX_HEADER: \usepackage{csquotes}
+#+LaTeX_HEADER: \usepackage[style=numeric,language=british,backend=biber]{biblatex}
+#+LaTeX_HEADER: \DeclareLanguageMapping{british}{british-apa}
+#+LaTeX_HEADER: \addbibresource{actr-paired-htc.bib}
+#+LaTeX_HEADER: \usepackage{color}
+#+LaTeX_HEADER: \usepackage[usenames,dvipsnames,svgnames,table]{xcolor}
+#+LaTeX_HEADER: \usepackage{hyperref}
+#+LaTeX_HEADER: \usepackage[T1]{fontenc}
+#+LaTeX_HEADER: \usepackage[ttscale=.875]{libertine}
+#+LaTeX_HEADER: \usepackage[libertine]{newtxmath}
+#+LaTeX_HEADER: \hypersetup{colorlinks=true,urlcolor=BrickRed,citecolor=Maroon}
+
+#+LaTeX_HEADER: \lstset{basicstyle=\small,language=Lisp}
+
+#+LaTeX_HEADER: \usepackage{sectsty}
+#+LaTeX_HEADER: \sectionfont{\normalfont\scshape}
+#+LaTeX_HEADER: \subsectionfont{\normalfont\itshape}
+
+#+TITLE: Optimising the ACT-R paired associate model \\ using HTCondor
+#+AUTHOR: David Peebles
+#+DATE: \today
+
+* Introduction
+This repository contains four key files: /paired.lisp/ which contains
+the ACT-R model code taken from Unit 4 of the ACT-R tutorials,
+/actr-s-64.exe/ the standalone ACT-R executable MS Windows,
+/paired.job/ which is the HTCondor submit description file, and
+/new-random-state.lisp/ which creates a random module to address
+certain issues with random number generation (discussed further
+below).
+
+A detailed description of the paired associate task and the ACT-R
+model can be found in the documents /unit4.pdf/ and /unit4_exp.pdf/
+from the tutorial unit (available in the repository).  The paired
+associate model is an ideal example to use because it is relatively
+simple but requires the four parameters shown in Table [[tab:parameters]]
+to be estimated (although, as with most models, the base-level
+learning parameter remains unchanged from its recommended value of
+0.5).
+
+#+CAPTION: Optimal parameter values for ACT-R paired associate model
+#+NAME: tab:parameters
+|--------------------------------+-------+-------|
+| Parameter                      | Label | Value |
+|--------------------------------+-------+-------|
+| Retrieval threshold            | :rt   |    -2 |
+| Latency factor                 | :lf   |   0.4 |
+| Instantaneous activation noise | :ans  |   0.5 |
+| Base-level learning rate       | :bll  |   0.5 |
+|--------------------------------+-------+-------|
+
+To incorporate the optimisation procedure, the original model code has
+been modified to include three variables that will hold the values of
+the other parameters
+#+BEGIN_SRC lisp
+(defvar *rt* 1.0)   ;; retrieval threshold
+(defvar *lf* 1.0)   ;; latency factor
+(defvar *ans* 1.0)  ;; activation noise
+#+END_SRC
+
+In the /diff-evol.lisp/ file a function is defined to assign these
+values their values from a parameter vector
+#+BEGIN_SRC lisp
+(defun assign-model-parameters (vec)
+  (setf *rt* (aref vec 0))
+  (setf *lf* (aref vec 1))
+  (setf *ans* (aref vec 2)))
+#+END_SRC
+and then these are used to set the parameters in the model definition
+using ACT-R's /sgp-fct/ function
+#+BEGIN_SRC lisp
+(sgp-fct (list
+          :rt *rt*      ;; retrieval threshold
+          :lf *lf*      ;; latency factor
+          :ans *ans*))  ;; activation noise
+#+END_SRC
+
+* Creating a submit description file
+
+
+* Random number generation
+
+
+\printbibliography
+
+
+
+
+

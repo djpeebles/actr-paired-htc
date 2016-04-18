@@ -1,0 +1,38 @@
+universe = vanilla
+
+# select only 64-bit Windows machines in CE1/13
+requirements = ((OpSys == "WINNT61" && Arch == "INTEL") || (OpSys == "WINDOWS" && Arch == "INTEL") || (OpSys == "WINDOWS" && Arch == "X86_64"))
+
+executable = act-r-s-64.exe
+transfer_executable = ALWAYS
+
+###############################################
+#                                             #
+# Provide details of your script file here    #
+#                                             #
+###############################################
+arguments = "-l 'new-random-state.lisp' -l 'paired.lisp' -e '(paired-experiment 100)' -e '(quit)'"
+transfer_input_files = new-random-state.lisp, paired.lisp
+
+# use this to bring back specific files
+# if omitted returns all files
+
+# transfer_output_files = test.lisp
+
+should_transfer_files = true
+when_to_transfer_output = on_exit
+
+# log the output from each node in current folder
+output = out.stdout.$(Cluster).$(Process)
+error = out.err.$(Cluster).$(Process)
+log = out.clog.$(Cluster).$(Process)
+initial_dir=.
+Notification = ERROR
+
+#################################
+#                               #
+# Enter number of jobs to queue #
+#                               #
+#################################
+
+queue 100
