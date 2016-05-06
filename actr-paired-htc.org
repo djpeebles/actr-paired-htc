@@ -10,7 +10,7 @@
 #+OPTIONS: TeX:t LaTeX:t ':t skip:nil ^:nil d:nil todo:t pri:nil tags:not-in-toc
 #+OPTIONS: toc:nil H:5 num:0
 
-#+LaTeX_HEADER: \usepackage[margin=1in]{geometry}
+#+LaTeX_HEADER: \usepackage[margin=2.54cm]{geometry}
 #+LATEX_HEADER: \usepackage{verbatim}
 #+LaTeX_HEADER: \usepackage[british]{babel}
 #+LaTeX_HEADER: \usepackage{csquotes}
@@ -25,7 +25,7 @@
 #+LaTeX_HEADER: \usepackage[libertine]{newtxmath}
 #+LaTeX_HEADER: \hypersetup{colorlinks=true,urlcolor=BrickRed,citecolor=Maroon}
 
-#+LaTeX_HEADER: \lstset{basicstyle=\small,language=Lisp}
+#+LaTeX_HEADER: \lstset{basicstyle=\scriptsize,language=Lisp,showstringspaces=false}
 
 #+LaTeX_HEADER: \usepackage{sectsty}
 #+LaTeX_HEADER: \sectionfont{\normalfont\scshape}
@@ -36,9 +36,16 @@
 #+DATE: \today
 
 * Introduction
+This document describes the files in this repository that will allow
+you to run multiple copies of an ACT-R model using a High Throughput
+Computing (HTC) environment managed by HTCondor.  It describes the
+required changes to the model code to allocate random values to the
+parameters and the key commands in the HTCondor /submit description
+file/ to run the model on a network of 64-bit MS Windows computers.
+
 This repository contains four key files: /paired.lisp/ which contains
 the ACT-R model code taken from Unit 4 of the ACT-R tutorials,
-/actr-s-64.exe/ the standalone ACT-R executable MS Windows,
+/actr-s-64.exe/ the standalone ACT-R executable for MS Windows,
 /paired.job/ which is the HTCondor submit description file, and
 /new-random-state.lisp/ which creates a random module to address
 certain issues with random number generation (discussed further
@@ -64,41 +71,128 @@ learning parameter remains unchanged from its recommended value of
 | Base-level learning rate       | :bll  |   0.5 |
 |--------------------------------+-------+-------|
 
-To incorporate the optimisation procedure, the original model code has
-been modified to include three variables that will hold the values of
-the other parameters
+* Required changes to the model code
+The aim of this exercise is to use HTCondor to explore cognitive model
+parameter spaces by running multiple copies of the model, each with a
+different set of randomly generated parameter values, and then
+analysing the returned outputs to identify promising candidates.
+
+The values for each parameter are typically constrained between
+maximum and minimum bounds so the /bounded-random/ function returns a
+real-valued random number between max and min (ensuring that the
+random function is passed a floating point to avoid integer only
+results).  This function can be found in the file
+/new-random-state.lisp/.
 #+BEGIN_SRC lisp
-(defvar *rt* 1.0)   ;; retrieval threshold
-(defvar *lf* 1.0)   ;; latency factor
-(defvar *ans* 1.0)  ;; activation noise
+(defun bounded-random (min max)
+  (let ((delta (- max min)))
+    (+ min (if (integerp delta)
+               (act-r-random (* 1.0 delta))
+             (act-r-random delta)))))
 #+END_SRC
 
-In the /diff-evol.lisp/ file a function is defined to assign these
-values their values from a parameter vector
+To allocate the values, the parameter assignments in the model
+definition are commented out in the /sgp/ ACT-R command and replaced
+by the /sgp-fct/ function.  In addition the command that sets the
+random seed is commented out as this has the effect of ensuring the
+same random numbers are created for every run of the original model.
+
 #+BEGIN_SRC lisp
-(defun assign-model-parameters (vec)
-  (setf *rt* (aref vec 0))
-  (setf *lf* (aref vec 1))
-  (setf *ans* (aref vec 2)))
-#+END_SRC
-and then these are used to set the parameters in the model definition
-using ACT-R's /sgp-fct/ function
-#+BEGIN_SRC lisp
+(sgp :v nil
+     :esc t
+  ;; :rt -2
+  ;; :lf 0.4
+  ;; :ans 0.5
+     :bll 0.5
+     :act nil
+     :ncnar nil)
+
+ ;; (sgp :seed (200 4))
+
 (sgp-fct (list
-          :rt *rt*      ;; retrieval threshold
-          :lf *lf*      ;; latency factor
-          :ans *ans*))  ;; activation noise
+          :rt (bounded-random -5.0 -0.01)   ;; retrieval threshold
+          :lf (bounded-random 0.01 0.8)     ;; latency factor
+          :ans (bounded-random 0.01 0.8)))  ;; activation noise
+#+END_SRC
+
+Finally, to identify the set of parameter values associated with the
+model run output, the following ACT-R command is added to the
+/output-data/ function in the model file which outputs the parameter
+values to stdout@@latex:\footnote{All changes to the ACT-R model file
+can be found by searching for `HTC'}@@.
+#+BEGIN_SRC lisp
+(sgp :rt :lf :ans)
+#+END_SRC
+
+* Random number generation
+A potential problem arises with the generation of random numbers
+related to how various Lisp implementations set the seed for the
+pseudorandom number generator (PRNG).  In particular, it is crucial
+that each instance of a model is initialised with a unique seed.  Many
+Lisps (and the ACT-R random module) use the computer's clock to
+generate the starting seed but this may cause a problem if different
+instances are given the same clock time when they are loaded or run.
+
+One way to reduce the likelihood of this occurring is to always use
+the ACT-R PRNG and create a version which, rather than using the
+system clock, uses a random number generated from Clozure Common Lisp
+(the Lisp implementation used to create the MS Windows standalone
+ACT-R executable, which doesn't use the system clock anyway) to seed
+ACT-R's PRNG.  This method is employed in a new ACT-R
+/create-random-module/ function (in the file /new-random-state.lisp/)
+which is loaded prior to loading the model file.
+#+BEGIN_SRC lisp
+(defun create-random-module (ignore)
+  (declare (ignore ignore))
+  (let* ((state (make-mersenne-twister))
+         (vec (coerce (ccl::random.mrg31k3p-state (make-random-state t)) 'simple-vector)))
+    (init_by_array vec state)
+    (make-act-r-random-module :state state)))
 #+END_SRC
 
 * Creating a submit description file
+To submit jobs for execution under HTCondor, one must create a /submit
+description file/.  The file /paired.job/ in the repository is a
+submit description file which contains a minimum set of commands to
+run 100 instances of the paired model on a network of on a network of
+64-bit MS Windows computers@@latex:\footnote{All commands can be found in the
+\href{https://research.cs.wisc.edu/htcondor/manual/}{HTCondor
+manual}}@@.
 
+To run this submit description file will require finding out the
+particular features of ones own local HTC environment and probably
+some appropriate modification but I discuss the commands specific to
+running the ACT-R model below.
 
-* Random number generation
+The four lines below specify the MS Windows standalone ACT-R
+executable as the executable to be run and that it should always be
+transferred to the computers in the network.  Line 3 specifies the
+argument to the executable, a string containing the sequence of files
+to load (-l) and then functions to execute (-e).  The first of these
+runs the model while the second exits the Lisp environment.  Finally,
+the fourth line specifies the code files to be transferred to the
+network computers.
+#+BEGIN_SRC lisp
+executable = act-r-s-64.exe
+transfer_executable = ALWAYS
+arguments = "-l 'new-random-state.lisp' -l 'paired.lisp' -e '(paired-experiment 100)' -e '(quit)'"
+transfer_input_files = new-random-state.lisp, paired.lisp
+#+END_SRC
 
+The next four lines below specify the file names of the output, error
+and log files that will be generated by each model run.  Each model
+run in a job will be created with the same job 'cluster' number and a
+unique 'process' number.
+#+BEGIN_SRC python
+output = out.stdout.$(Cluster).$(Process)
+error = out.err.$(Cluster).$(Process)
+log = out.clog.$(Cluster).$(Process)
+#+END_SRC
+
+Finally the command below submits 100 instances of the model to the
+queue as one job.
+#+BEGIN_SRC lisp
+queue 100
+#+END_SRC
 
 \printbibliography
-
-
-
-
-

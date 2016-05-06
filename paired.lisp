@@ -1,18 +1,3 @@
-;; Define model parameters that will be given random values
-;; ========================================================
-
-
-;; Return a real-valued random number between max and min (if max and
-;; min are reals).
-
-(defun bounded-random (min max)
-    (+ min (random (- max min))))
-
-;; Initialise parameters to bounded random numbers
-(defvar *rt* (bounded-random -5.0 -0.01))   ;; retrieval threshold
-(defvar *lf* (bounded-random 0.01 0.8))     ;; latency factor
-(defvar *ans* (bounded-random 0.01 0.8))    ;; activation noise
-
 (defvar *response* nil)
 (defvar *response-time* nil)
 (defvar *model-doing-task* nil)
@@ -118,6 +103,8 @@
 (defun output-data (data n)
   (let ((probability (mapcar (lambda (x) (/ (first x) n)) data))
         (latency (mapcar (lambda (x) (/ (or (second x) 0) n)) data)))
+    (format t "~%==================================~%")  ;; HTC
+    (sgp :rt :lf :ans)    ;; HTC
     (print-results latency *paired-latencies* "Latency")
     (print-results probability *paired-probability* "Accuracy")))
 
@@ -137,21 +124,21 @@
 
 (define-model paired
 
-    (sgp :v nil
+    (sgp :v nil      ;; HTC
          :esc t
-;;         :rt -2
-;;         :lf 0.4
-;;         :ans 0.5
+      ;; :rt -2      ;; retrieval threshold
+      ;; :lf 0.4     ;; latency factor
+      ;; :ans 0.5    ;; activation noise
          :bll 0.5
          :act nil
          :ncnar nil)
 
-  (sgp :seed (200 4))
+  ;; (sgp :seed (200 4))  ;; HTC
 
-  (sgp-fct (list
-            :rt *rt*      ;; retrieval threshold
-            :lf *lf*      ;; latency factor
-            :ans *ans*))  ;; activation noise
+  (sgp-fct (list          ;; HTC
+            :rt (bounded-random -5.0 -0.01)
+            :lf (bounded-random 0.01 0.8)
+            :ans (bounded-random 0.01 0.8)))
 
 (chunk-type goal state)
 (chunk-type pair probe answer)
