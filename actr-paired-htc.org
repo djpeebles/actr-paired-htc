@@ -194,5 +194,3 @@ queue as one job.
 #+BEGIN_SRC lisp
 queue 100
 #+END_SRC
-
-\printbibliography
