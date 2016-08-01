@@ -5,27 +5,42 @@
 # Initiated: Sat Jan 30 08:59:13 2016
 # ==============================================
 
+#+STARTUP: showall
 #+LATEX_CLASS: article
 #+LaTeX_CLASS_OPTIONS: [a4paper,11pt]
 #+OPTIONS: TeX:t LaTeX:t ':t skip:nil ^:nil d:nil todo:t pri:nil tags:not-in-toc
 #+OPTIONS: toc:nil H:5 num:0
 
-#+LaTeX_HEADER: \usepackage[margin=2.54cm]{geometry}
+#+LaTeX_HEADER: \usepackage{geometry}
+#+LaTeX_HEADER: \geometry{left=2.35cm, top=2cm, right=2.35cm, bottom=2cm}
 #+LATEX_HEADER: \usepackage{verbatim}
 #+LaTeX_HEADER: \usepackage[british]{babel}
 #+LaTeX_HEADER: \usepackage{csquotes}
+#+LaTeX_HEADER: \graphicspath{{./}{figures/}}
 #+LaTeX_HEADER: \usepackage[style=numeric,language=british,backend=biber]{biblatex}
 #+LaTeX_HEADER: \DeclareLanguageMapping{british}{british-apa}
-#+LaTeX_HEADER: \addbibresource{actr-paired-htc.bib}
+#+LaTeX_HEADER: \addbibresource{actr-paired-de.bib}
 #+LaTeX_HEADER: \usepackage{color}
 #+LaTeX_HEADER: \usepackage[usenames,dvipsnames,svgnames,table]{xcolor}
 #+LaTeX_HEADER: \usepackage{hyperref}
 #+LaTeX_HEADER: \usepackage[T1]{fontenc}
 #+LaTeX_HEADER: \usepackage[ttscale=.875]{libertine}
 #+LaTeX_HEADER: \usepackage[libertine]{newtxmath}
-#+LaTeX_HEADER: \hypersetup{colorlinks=true,urlcolor=BrickRed,citecolor=Maroon}
 
-#+LaTeX_HEADER: \lstset{basicstyle=\scriptsize,language=Lisp,showstringspaces=false}
+#+LaTeX_HEADER: \hypersetup{colorlinks=true,
+#+LaTeX_HEADER: urlcolor=BrickRed,
+#+LaTeX_HEADER: citecolor=Maroon,
+#+LaTeX_HEADER: pdfauthor={David Peebles},
+#+LaTeX_HEADER: pdftitle={Optimising ACT-R models using differential evolution},
+#+LaTeX_HEADER: pdfsubject={Optimising ACT-R models},
+#+LaTeX_HEADER: pdfkeywords={ACT-R, Differential Evolution},
+#+LaTeX_HEADER: pdflang={English}}
+
+#+LaTeX_HEADER: \lstset{ %
+#+LaTeX_HEADER: frame=lines, basicstyle=\footnotesize\ttfamily,
+#+LaTeX_HEADER: breaklines=true, language=Lisp, stringstyle=\color{PineGreen},
+#+LaTeX_HEADER: showstringspaces=false, commentstyle=\color{Mahogany},
+#+LaTeX_HEADER: numbers=left, numbersep=5pt, numberstyle=\scriptsize\color{MidnightBlue}}
 
 #+LaTeX_HEADER: \usepackage{sectsty}
 #+LaTeX_HEADER: \sectionfont{\normalfont\scshape}
@@ -83,21 +98,26 @@ real-valued random number between max and min (ensuring that the
 random function is passed a floating point to avoid integer only
 results).  This function can be found in the file
 /new-random-state.lisp/.
-#+BEGIN_SRC lisp
+#+begin_src lisp -n :exports code
 (defun bounded-random (min max)
   (let ((delta (- max min)))
     (+ min (if (integerp delta)
                (act-r-random (* 1.0 delta))
              (act-r-random delta)))))
-#+END_SRC
+#+end_src
 
 To allocate the values, the parameter assignments in the model
 definition are commented out in the /sgp/ ACT-R command and replaced
 by the /sgp-fct/ function.  In addition the command that sets the
 random seed is commented out as this has the effect of ensuring the
 same random numbers are created for every run of the original model.
+Finally, to identify the set of parameter values associated with the
+model run output, the following ACT-R command is added to the
+/output-data/ function in the model file which outputs the parameter
+values to stdout@@latex:\footnote{All changes to the ACT-R model file
+can be found by searching for `HTC'}@@.
 
-#+BEGIN_SRC lisp
+#+begin_src lisp -n :exports code
 (sgp :v nil
      :esc t
   ;; :rt -2
@@ -113,16 +133,9 @@ same random numbers are created for every run of the original model.
           :rt (bounded-random -5.0 -0.01)   ;; retrieval threshold
           :lf (bounded-random 0.01 0.8)     ;; latency factor
           :ans (bounded-random 0.01 0.8)))  ;; activation noise
-#+END_SRC
 
-Finally, to identify the set of parameter values associated with the
-model run output, the following ACT-R command is added to the
-/output-data/ function in the model file which outputs the parameter
-values to stdout@@latex:\footnote{All changes to the ACT-R model file
-can be found by searching for `HTC'}@@.
-#+BEGIN_SRC lisp
 (sgp :rt :lf :ans)
-#+END_SRC
+#+end_src
 
 * Random number generation
 A potential problem arises with the generation of random numbers
@@ -141,14 +154,14 @@ ACT-R executable, which doesn't use the system clock anyway) to seed
 ACT-R's PRNG.  This method is employed in a new ACT-R
 /create-random-module/ function (in the file /new-random-state.lisp/)
 which is loaded prior to loading the model file.
-#+BEGIN_SRC lisp
+#+begin_src lisp -n :exports code
 (defun create-random-module (ignore)
   (declare (ignore ignore))
   (let* ((state (make-mersenne-twister))
          (vec (coerce (ccl::random.mrg31k3p-state (make-random-state t)) 'simple-vector)))
     (init_by_array vec state)
     (make-act-r-random-module :state state)))
-#+END_SRC
+#+end_src
 
 * Creating a submit description file
 To submit jobs for execution under HTCondor, one must create a /submit
@@ -156,41 +169,35 @@ description file/.  The file /paired.job/ in the repository is a
 submit description file which contains a minimum set of commands to
 run 100 instances of the paired model on a network of on a network of
 64-bit MS Windows computers@@latex:\footnote{All commands can be found in the
-\href{https://research.cs.wisc.edu/htcondor/manual/}{HTCondor
-manual}}@@.
+\href{https://research.cs.wisc.edu/htcondor/manual/}{HTCondor manual}}@@.
 
 To run this submit description file will require finding out the
 particular features of ones own local HTC environment and probably
 some appropriate modification but I discuss the commands specific to
 running the ACT-R model below.
 
-The four lines below specify the MS Windows standalone ACT-R
-executable as the executable to be run and that it should always be
-transferred to the computers in the network.  Line 3 specifies the
+Lines 1--4 in the listing below specify the MS Windows standalone
+ACT-R executable as the executable to be run and that it should always
+be transferred to the computers in the network.  Line 3 specifies the
 argument to the executable, a string containing the sequence of files
 to load (-l) and then functions to execute (-e).  The first of these
 runs the model while the second exits the Lisp environment.  Finally,
 the fourth line specifies the code files to be transferred to the
 network computers.
-#+BEGIN_SRC lisp
+
+Lines 6--8 specify the file names of the output, error and log files
+that will be generated by each model run.  Each model run in a job
+will be created with the same job 'cluster' number and a unique
+'process' number.  Finally line 9 submits 100 instances of the model
+to the queue as one job.
+#+begin_src lisp -n :exports code
 executable = act-r-s-64.exe
 transfer_executable = ALWAYS
 arguments = "-l 'new-random-state.lisp' -l 'paired.lisp' -e '(paired-experiment 100)' -e '(quit)'"
 transfer_input_files = new-random-state.lisp, paired.lisp
-#+END_SRC
 
-The next four lines below specify the file names of the output, error
-and log files that will be generated by each model run.  Each model
-run in a job will be created with the same job 'cluster' number and a
-unique 'process' number.
-#+BEGIN_SRC python
 output = out.stdout.$(Cluster).$(Process)
 error = out.err.$(Cluster).$(Process)
 log = out.clog.$(Cluster).$(Process)
-#+END_SRC
-
-Finally the command below submits 100 instances of the model to the
-queue as one job.
-#+BEGIN_SRC lisp
 queue 100
-#+END_SRC
+#+end_src
